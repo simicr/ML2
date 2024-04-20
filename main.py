@@ -57,42 +57,26 @@ def task2(x, K):
     """ Start of your code
     """
 
-    def logsumexp_stable(x):
-        xmax = np.max(x)
-
-        return xmax + np.log(np.sum(np.exp(x - xmax)))
-
     def normal_dist(x, mu, sigma):
         D = x.shape[1]
 
-        probs = np.zeros(shape=(K, S))
-        
+        log_probs = np.zeros(shape=(K, S))
         x = np.tile(np.expand_dims(x, axis=(K-1)), (1, 1, K)) # (S, D) -> (S, D, K)  
         mu = mu.T # (K, D) -> (D, K) 
         diff = (x-mu) # (S,D,K)
 
-        # log trick
-        first_part = -0.5 * (D * np.log(2 * np.pi) + np.log(np.linalg.det(sigma + 1e-6 * np.eye(D))))
+        # We take the log, otherwise we encounter overflow/underflow error.
         for k in range(K):
             dk = diff[:, :, k]
             tmp = np.einsum('ij,Nj->Ni', np.linalg.inv(sigma[k] + 1e-6 * np.eye(D)), dk)
-
-            tmp_second_part = np.einsum('ij,Nj->Ni', np.linalg.inv(sigma[k] + 1e-6 * np.eye(D)), dk)
-            second_part = np.log(np.exp(-0.5 * tmp)) + np.log(np.exp(np.einsum('Ni,Ni->N',dk, tmp_second_part)))
-
-            probs[k] = first_part + second_part
-        return probs
-
-        #for k in range(K):
-        #    dk = diff[:,:,k]
-        #    tmp = np.einsum('ij,Nj->Ni',np.linalg.inv(sigma[k] + 1e-6*np.eye(D)),dk)
-        #    tmp = np.einsum('Ni,Ni->N',dk,tmp)
-
-        #    probs[k] = -0.5*tmp
-
-        #coef = 0.005 # Needs to be changed later.
-
-        #return coef ** np.exp(probs) #(K, S)
+            log_exp = -0.5 * np.einsum('Ni,Ni->N',dk, tmp)
+            
+            choelsky = np.linalg.cholesky(sigma[k] + 1e-6 * np.eye(D)) 
+            sigma_det = np.linalg.det(choelsky) ** 2 # np.linalg.det(choelsky.T) 
+            log_coef = -0.5 * (D * np.log(2 * np.pi) + np.log(sigma_det))
+            log_probs[k] = log_coef + log_exp
+        
+        return log_probs
     
     def em_algotithm(x, mu, sigma, pi):
 
@@ -107,24 +91,23 @@ def task2(x, K):
                 converged = True
             else:
                 j = j + 1
-
+                # We calculate the logs of w's and then take the exponents.
                 ws = np.zeros(shape=(K, S))
-                probs = normal_dist(x, mu, sigma)
-
-                # Could be changed 
-                for k in range(K):
-                    weighted_probs = pi[k]*probs[k]
-                    ws[k] = weighted_probs/np.sum(weighted_probs)
-                ws = ws[:,:,np.newaxis]
+                log_probs = normal_dist(x, mu, sigma) # (K, S)
+                log_pi = np.log(pi[:, np.newaxis]) # (K,1)
+                max_log_probs = np.max(log_probs, axis=0).reshape((1, -1)) # (1, S)
+                tmp = np.exp(log_probs - max_log_probs) # (K, S)
+                tmp = np.sum(pi[:, np.newaxis]*tmp, axis=1) # (K, )
+                tmp = np.log(tmp[:, np.newaxis]) # (K, 1)
+                ws = (log_pi + log_probs) - (max_log_probs + tmp) # ((K, 1) + (K,S)) - ((1,S) + (K, 1)) -> (K,S) + (K,S) -> (K, S) 
+                ws = np.exp(ws) # (K, S)
 
                 for k in range(K):
                     Nk = np.sum(ws[k])
-                    mu[k] = np.sum(ws[k]*x, axis=0)/np.sum(Nk)
-                    #outer_product = np.einsum('ij,ik->ijk', (x-mu[k]), (x-mu[k]))
+                    mu[k] = np.sum(ws[k,:,np.newaxis]*x, axis=0)/ Nk
                     diff = x-mu[k]
-                    outer_product = np.einsum('ij,ik->ijk', ws[k] * diff, diff)
-                    sigma[k] = outer_product / Nk
-                    pi[k] = Nk / ws[k].shape[0]
+                    sigma[k] = np.einsum('ij,ik->ijk', ws[k, :, np.newaxis] * diff, diff).sum(axis=0) / Nk
+                    pi[k] = Nk / S
 
                 likelihood_next = 0 
                 delta = np.abs(likelihood_next - likelihood)
@@ -174,8 +157,6 @@ def task2(x, K):
         sigma.append(np.identity(M*M))
     pi = np.ones(K)/K
     mu, sigma, pi = em_algotithm(x, mu, sigma, pi)
-    
-
 
     for k in range(K):
         ax1[0,k].imshow(mu[k].reshape(M, M), cmap='gray')
@@ -239,7 +220,6 @@ if __name__ == '__main__':
 
     # Task 2: fit GMM to FashionMNIST subset
     K = 3 # TODO: adapt the number of GMM components
-    task2(x_train, K)
     gmm_params, fig1 = task2(x_train,K)
 
     # Task 2: inpainting with conditional GMM
