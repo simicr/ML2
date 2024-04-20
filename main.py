@@ -57,6 +57,11 @@ def task2(x, K):
     """ Start of your code
     """
 
+    def logsumexp_stable(x):
+        xmax = np.max(x)
+
+        return xmax + np.log(np.sum(np.exp(x - xmax)))
+
     def normal_dist(x, mu, sigma):
         D = x.shape[1]
 
@@ -64,17 +69,30 @@ def task2(x, K):
         
         x = np.tile(np.expand_dims(x, axis=(K-1)), (1, 1, K)) # (S, D) -> (S, D, K)  
         mu = mu.T # (K, D) -> (D, K) 
-        diff = (x-mu) # (S,D,K) 
+        diff = (x-mu) # (S,D,K)
 
+        # log trick
+        first_part = -0.5 * (D * np.log(2 * np.pi) + np.log(np.linalg.det(sigma + 1e-6 * np.eye(D))))
         for k in range(K):
-            dk = diff[:,:,k]
-            tmp = np.einsum('ij,Nj->Ni',np.linalg.inv(sigma[k] + 1e-6*np.eye(D)),dk) 
-            tmp = np.einsum('Ni,Ni->N',dk,tmp)
-            probs[k] = -0.5*tmp
+            dk = diff[:, :, k]
+            tmp = np.einsum('ij,Nj->Ni', np.linalg.inv(sigma[k] + 1e-6 * np.eye(D)), dk)
 
-        coef = 0.005 # Needs to be changed later.
-        
-        return  coef*np.exp(probs) #(K, S)
+            tmp_second_part = np.einsum('ij,Nj->Ni', np.linalg.inv(sigma[k] + 1e-6 * np.eye(D)), dk)
+            second_part = np.log(np.exp(-0.5 * tmp)) + np.log(np.exp(np.einsum('Ni,Ni->N',dk, tmp_second_part)))
+
+            probs[k] = first_part + second_part
+        return probs
+
+        #for k in range(K):
+        #    dk = diff[:,:,k]
+        #    tmp = np.einsum('ij,Nj->Ni',np.linalg.inv(sigma[k] + 1e-6*np.eye(D)),dk)
+        #    tmp = np.einsum('Ni,Ni->N',dk,tmp)
+
+        #    probs[k] = -0.5*tmp
+
+        #coef = 0.005 # Needs to be changed later.
+
+        #return coef ** np.exp(probs) #(K, S)
     
     def em_algotithm(x, mu, sigma, pi):
 
@@ -101,11 +119,12 @@ def task2(x, K):
 
                 for k in range(K):
                     Nk = np.sum(ws[k])
-                    mu[k] = np.sum( ws[k]*x, axis=0)/np.sum(Nk)
-                    outer_product = np.einsum('ij,ik->ijk', (x-mu[k]), (x-mu[k]))
-                    sigma[k] = sigma[k] # Think of a way given the outer product
-                    pi[k] = Nk/pi[k]
-
+                    mu[k] = np.sum(ws[k]*x, axis=0)/np.sum(Nk)
+                    #outer_product = np.einsum('ij,ik->ijk', (x-mu[k]), (x-mu[k]))
+                    diff = x-mu[k]
+                    outer_product = np.einsum('ij,ik->ijk', ws[k] * diff, diff)
+                    sigma[k] = outer_product / Nk
+                    pi[k] = Nk / ws[k].shape[0]
 
                 likelihood_next = 0 
                 delta = np.abs(likelihood_next - likelihood)
@@ -121,14 +140,14 @@ def task2(x, K):
         converged = False
         criteria = 0.005
 
-        centroids = x[:K] 
+        centroids = x[:K]
         while not converged:
 
             if j == J:
                 converged = True
             else:
                 j = j + 1
-                cluster_info = {k:[] for k in range(K)} # Could maybe do something different?
+                cluster_info = {k:[] for k in range(K)}
                 for data_point in x:
                     distance = np.sum((data_point - centroids)*(data_point - centroids), axis=1) 
                     prediction = np.argmin(distance)
@@ -136,9 +155,8 @@ def task2(x, K):
 
                 new_centroids = np.zeros(centroids.shape)
                 for cluster in cluster_info.keys():
-                    new_centroids[cluster] = np.mean(cluster_info[cluster], axis=0) # Good shape but are the values good?
+                    new_centroids[cluster] = np.mean(cluster_info[cluster], axis=0)
 
-                
                 delta = np.max(np.abs(new_centroids - centroids))
                 converged = delta < criteria
                 centroids = new_centroids
@@ -221,6 +239,7 @@ if __name__ == '__main__':
 
     # Task 2: fit GMM to FashionMNIST subset
     K = 3 # TODO: adapt the number of GMM components
+    task2(x_train, K)
     gmm_params, fig1 = task2(x_train,K)
 
     # Task 2: inpainting with conditional GMM
