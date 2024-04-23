@@ -61,27 +61,27 @@ def task2(x, K):
         D = x.shape[1]
 
         log_probs = np.zeros(shape=(K, S))
-        x = np.tile(np.expand_dims(x, axis=(K-1)), (1, 1, K)) # (S, D) -> (S, D, K)  
-        mu = mu.T # (K, D) -> (D, K) 
-        diff = (x-mu) # (S,D,K)
-
+        x = np.tile(np.expand_dims(x, axis=1), (1, K, 1)) # (S, D) -> (S, K, D)           
+        diff = (x-mu) # (S, K, D)
+    
         # We take the log, otherwise we encounter overflow/underflow error.
         for k in range(K):
-            dk = diff[:, :, k]
-            tmp = np.einsum('ij,Nj->Ni', np.linalg.inv(sigma[k] + 1e-6 * np.eye(D)), dk)
-            log_exp = -0.5 * np.einsum('Ni,Ni->N',dk, tmp)
+            dk = diff[:,k,:].T
+            tmp = np.linalg.inv(sigma[k] + 1e-6*np.eye(D)) @ dk
+            log_exp = -0.5 * np.sum(dk * tmp, axis=0)
             
-            choelsky = np.linalg.cholesky(sigma[k] + 1e-6 * np.eye(D)) 
-            sigma_det = np.linalg.det(choelsky) ** 2 # np.linalg.det(choelsky.T) 
-            log_coef = -0.5 * (D * np.log(2 * np.pi) + np.log(sigma_det))
+            
+            choelsky = np.linalg.cholesky(sigma[k] + 1e-6 * np.eye(D)) + 1e-6 * np.eye(D)
+            sigma_det = 2*np.sum(np.log(np.diagonal(choelsky)))  
+            log_coef = -0.5 * (D * np.log(2 * np.pi) + sigma_det)            
             log_probs[k] = log_coef + log_exp
         
         return log_probs
     
     def em_algotithm(x, mu, sigma, pi):
 
-        J = 25
-        criteria = 0.1
+        J = 15
+        criteria = 0.01
         j = 0 
         converged = False
         likelihood = -np.inf
@@ -89,27 +89,28 @@ def task2(x, K):
         while not converged:
             if j == J:
                 converged = True
+
             else:
                 j = j + 1
                 # We calculate the logs of w's and then take the exponents.
                 ws = np.zeros(shape=(K, S))
                 log_probs = normal_dist(x, mu, sigma) # (K, S)
                 log_pi = np.log(pi[:, np.newaxis]) # (K,1)
-                max_log_probs = np.max(log_probs, axis=0).reshape((1, -1)) # (1, S)
-                tmp = np.exp(log_probs - max_log_probs) # (K, S)
-                tmp = np.sum(pi[:, np.newaxis]*tmp, axis=1) # (K, )
-                tmp = np.log(tmp[:, np.newaxis]) # (K, 1)
-                ws = (log_pi + log_probs) - (max_log_probs + tmp) # ((K, 1) + (K,S)) - ((1,S) + (K, 1)) -> (K,S) + (K,S) -> (K, S) 
+                
+                max_log_probs = np.max(log_probs, axis=0) # Maximum log prob of samples
+                tmp = np.log(np.sum( pi[..., None] * (np.exp(log_probs - max_log_probs)) 
+                                                                    , axis=0)) # log sum exp trick done 
+
+                ws = log_pi + log_probs - max_log_probs - tmp  
                 ws = np.exp(ws) # (K, S)
 
-                for k in range(K):
-                    Nk = np.sum(ws[k])
-                    mu[k] = np.sum(ws[k,:,np.newaxis]*x, axis=0)/ Nk
-                    diff = x-mu[k]
-                    sigma[k] = np.einsum('ij,ik->ijk', ws[k, :, np.newaxis] * diff, diff).sum(axis=0) / Nk
-                    pi[k] = Nk / S
+                Nk = ws.sum(1) 
+                mu = (ws[...,None]*x[None,...]).sum(1)/Nk[:,None] 
+                diff = (x[None,...] - mu[:,None,:]) 
+                sigma = np.einsum('KNi,KNj->Kij',ws[:,:,None]*diff,diff)/Nk[:,None,None]
+                pi = Nk/S
 
-                likelihood_next = 0 
+                likelihood_next = np.sum(max_log_probs + tmp) 
                 delta = np.abs(likelihood_next - likelihood)
                 likelihood  = likelihood_next
                 converged = delta < criteria
@@ -162,7 +163,7 @@ def task2(x, K):
         ax1[0,k].imshow(mu[k].reshape(M, M), cmap='gray')
         ax1[1,k].imshow(sigma[k], cmap='viridis')
 
-    for i in range(10):
+    for i in range(num_samples):
         k = np.random.choice(K, p=pi)
         sample = np.random.multivariate_normal(mu[k], sigma[k])
         ax2[i // 5, i % 5].imshow(sample.reshape(M,M), cmap='gray')
