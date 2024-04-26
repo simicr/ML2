@@ -6,7 +6,9 @@ IMPORTANT:
 - Only insert your code between the Start/Stop of your code tags.
 - Prior to your submission, check that the pdf showing your plots is generated.
 """
-
+import sys
+import numpy
+numpy.set_printoptions(threshold=sys.maxsize)
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
@@ -61,7 +63,7 @@ def task2(x, K):
         D = x.shape[1]
 
         log_probs = np.zeros(shape=(K, S))
-        x = np.tile(np.expand_dims(x, axis=1), (1, K, 1)) # (S, D) -> (S, K, D)           
+        x = np.tile(np.expand_dims(x, axis=1), (1, K, 1)) # (S, D) -> (S, K, D)
         diff = (x-mu) # (S, K, D)
     
         # We take the log, otherwise we encounter overflow/underflow error.
@@ -69,9 +71,9 @@ def task2(x, K):
             dk = diff[:,k,:].T
             tmp = np.linalg.inv(sigma[k] + 1e-6*np.eye(D)) @ dk
             log_exp = -0.5 * np.sum(dk * tmp, axis=0)
-            
-            
+
             choelsky = np.linalg.cholesky(sigma[k] + 1e-6 * np.eye(D)) + 1e-6 * np.eye(D)
+
             sigma_det = 2*np.sum(np.log(np.diagonal(choelsky)))  
             log_coef = -0.5 * (D * np.log(2 * np.pi) + sigma_det)            
             log_probs[k] = log_coef + log_exp
@@ -201,7 +203,89 @@ def task3(x, mask, m_params):
     """ Start of your code
     """
 
+    def normal_dist(x, mu, sigma):
+        D = x.shape[1]
 
+        log_probs = np.zeros(shape=(K, S))
+        x = np.tile(np.expand_dims(x, axis=1), (1, K, 1))  # (S, D) -> (S, K, D)
+        diff = (x - mu)  # (S, K, D)
+
+        # We take the log, otherwise we encounter overflow/underflow error.
+        for k in range(K):
+            dk = diff[:, k, :].T
+            tmp = np.linalg.inv(sigma[k] + 1e-6 * np.eye(D)) @ dk
+            log_exp = -0.5 * np.sum(dk * tmp, axis=0)
+
+            choelsky = np.linalg.cholesky(sigma[k] + 1e-6 * np.eye(D)) + 1e-6 * np.eye(D)
+            print((sigma[k]).shape)
+            print((1e-6 * np.eye(D)).shape)
+            sigma_det = 2 * np.sum(np.log(np.diagonal(choelsky)))
+            log_coef = -0.5 * (D * np.log(2 * np.pi) + sigma_det)
+            log_probs[k] = log_coef + log_exp
+
+        return log_probs
+
+    mask_2d = np.reshape(mask, (sz, _))
+
+    for i in range(S):
+        x[i] = x[i] * mask_2d
+
+    for s in range(S):
+        ax[s, 0].imshow(x[s], vmin=0, vmax=1., cmap='gray')
+
+    indices_of_one = np.flatnonzero(mask == 1)
+    indices_of_zero = np.flatnonzero(mask == 0)
+
+    length_x2 = len(indices_of_one)
+    length_x1 = 784 - length_x2
+
+    mu_1 = np.zeros(shape=(K, length_x1))
+    mu_2 = np.zeros(shape=(K, length_x2))
+    mu_old = m_params[0]
+    for i in range(K):
+        mu_2[i] = mu_old[i, indices_of_one]
+        mu_1[i] = mu_old[i, indices_of_zero]
+
+    sigma_12 = np.zeros(shape=(K, length_x1, length_x2))
+    sigma_22 = np.zeros(shape=(K, length_x2, length_x2))
+    sigma_11 = np.zeros(shape=(K, length_x1, length_x1))
+    sigma_21 = np.zeros(shape=(K, length_x2, length_x1))
+
+    for i in range(K):
+        rows = m_params[1][i][indices_of_zero, :]
+        matrix = rows[:, indices_of_one]
+        sigma_12[i] = matrix
+
+        rows = m_params[1][i][indices_of_one, :]
+        matrix = rows[:, indices_of_one]
+        sigma_22[i] = matrix
+
+        rows = m_params[1][i][indices_of_zero, :]
+        matrix = rows[:, indices_of_zero]
+        sigma_11[i] = matrix
+
+        rows = m_params[1][i][indices_of_one, :]
+        matrix = rows[:, indices_of_zero]
+        sigma_21[i] = matrix
+
+    x = np.reshape(x, [10, -1])
+
+    x2 = np.zeros(shape=(10, len(indices_of_one)))
+    x1 = np.zeros(shape=(10, len(indices_of_zero)))
+    for i in range(10):
+        x2[i] = x[i, indices_of_one]
+
+    sigma_1_cond_2 = [[[]]]
+    mu_1_cond_2 = [[[]]]
+
+    for i in range(K):
+        sigma_1_cond_2[i] = sigma_11[i] - sigma_12[i] @ np.linalg.inv(sigma_22[i] + 1e-6) @ sigma_21[i]
+        mu_1_cond_2[i] = mu_1[i] - sigma_12[i] @ np.linalg.inv(sigma_22[i] + 1e-6) @ (x2[i] - mu_2[i])
+
+
+    #for i in range(K):
+    log_probs = normal_dist(x2, mu_2, sigma_22) * normal_dist(x1, mu_1_cond_2, sigma_1_cond_2)
+    print(log_probs)
 
     """ End of your code
     """
@@ -212,7 +296,7 @@ if __name__ == '__main__':
     pdf = PdfPages('figures.pdf')
 
     # Task 1: transformations of pdfs
-    task1()
+    #task1()
 
     # load train and test data
     with np.load("data.npz") as f:
@@ -224,7 +308,7 @@ if __name__ == '__main__':
     gmm_params, fig1 = task2(x_train,K)
 
     # Task 2: inpainting with conditional GMM
-    mask = None
+    mask = np.random.choice([0, 1], size=28*28, p=[0.90, 0.1])
     fig2 = task3(x_test,mask,gmm_params)
 
     for f in fig1:
