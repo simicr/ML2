@@ -275,27 +275,26 @@ def task3(x, mask, m_params):
         x2[i] = x[i, indices_of_one]
 
     D = x2.shape[1]
-    sigma_1_cond_2 = np.zeros(shape=(K, length_x1, length_x1))
-    mu_1_cond_2 = np.zeros(shape=(K, 10, length_x1))
 
-    x2 = np.tile(np.expand_dims(x2, axis=1), (1, K, 1))
-    diff = (x2 - mu_2) # 10, 3, 79
+    sigma_1_cond_2 = np.zeros(shape=(3, 705, 705))
+    mu_1_cond_2 = np.zeros(shape=(K, 10, 705))
+    diff = x2[None,...] - mu_2[:,None,:]
 
     for i in range(K):
-        sigma_1_cond_2[i] = sigma_11[i] - sigma_12[i] @ np.linalg.inv(sigma_22[i] + 1e-6 * np.eye(D)) @ sigma_21[i]
-        first_part = sigma_12[i] @ np.linalg.inv(sigma_22[i] + 1e-6 * np.eye(D)) #705, 79
-        third_part = first_part @ diff[:, i, :] #ovdje nije dobra dimenzija
-        mu_1_cond_2[i] = mu_1[i].T - third_part
+        mu_1_cond_2[i] = (mu_1[i][:,None] + np.dot((sigma_12[i] @ np.linalg.inv(sigma_22 + 1e-6 * np.eye(D))[i,:,:]),diff[i, :,:].T)).T
+        sigma_1_cond_2[i] = sigma_11[i] - (sigma_12[i] @ np.linalg.inv(sigma_22 + 1e-6 * np.eye(D)) @ sigma_21[i])[i,:,:]
 
     pi = m_params[2]
-    numerator = normal_dist(x2, mu_2, sigma_22) * pi[:, np.newaxis] #3, 10
-    denominator = np.sum(pi[..., None] * normal_dist(x2, mu_2, sigma_22), axis = 0) # 10,
+    numerator = normal_dist(x2, mu_2, sigma_22) * pi[:, np.newaxis]
+    denominator = np.sum(pi[..., None] * normal_dist(x2, mu_2, sigma_22), axis = 0)
 
-    pi_new = numerator / denominator # (3, 10)
+    pi_new = numerator / denominator
 
-    posteriori_exp = np.sum(pi_new * normal_dist(x1, mu_1_cond_2, sigma_1_cond_2), axis = 0) # (10,)   nedostaje jedna dimenzija
-    #print(posteriori_exp.shape)
+    mu_1_cond_2 = mu_1_cond_2[:, 0, :]
 
+    # ovdje fali još suma, ali onda nestane još jedna dimenzija
+    posteriori_exp = pi_new * normal_dist(x1, mu_1_cond_2, sigma_1_cond_2)
+    print(posteriori_exp.shape)
 
     #for s in range(S):
     #    ax[s,2].imshow(x[s], vmin=0, vmax=1., cmap='gray')
