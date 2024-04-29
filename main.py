@@ -6,9 +6,6 @@ IMPORTANT:
 - Only insert your code between the Start/Stop of your code tags.
 - Prior to your submission, check that the pdf showing your plots is generated.
 """
-import sys
-import numpy
-numpy.set_printoptions(threshold=sys.maxsize)
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
@@ -63,9 +60,9 @@ def task2(x, K):
         D = x.shape[1]
 
         log_probs = np.zeros(shape=(K, S))
-        x = np.tile(np.expand_dims(x, axis=1), (1, K, 1)) # (S, D) -> (S, K, D)
-        diff = (x-mu) # (S, K, D)
-    
+        x = np.tile(np.expand_dims(x, axis=1), (1, K, 1))
+        diff = (x-mu)
+
         # We take the log, otherwise we encounter overflow/underflow error.
         for k in range(K):
             dk = diff[:,k,:].T
@@ -96,15 +93,15 @@ def task2(x, K):
                 j = j + 1
                 # We calculate the logs of w's and then take the exponents.
                 ws = np.zeros(shape=(K, S))
-                log_probs = normal_dist(x, mu, sigma) # (K, S)
-                log_pi = np.log(pi[:, np.newaxis]) # (K,1)
+                log_probs = normal_dist(x, mu, sigma)
+                log_pi = np.log(pi[:, np.newaxis])
                 
                 max_log_probs = np.max(log_probs, axis=0) # Maximum log prob of samples
-                tmp = np.log(np.sum( pi[..., None] * (np.exp(log_probs - max_log_probs)) 
-                                                                    , axis=0)) # log sum exp trick done 
+                tmp = np.log(np.sum( pi[..., None] * (np.exp(log_probs - max_log_probs))
+                                                                    , axis=0)) # log sum exp trick done
 
                 ws = log_pi + log_probs - max_log_probs - tmp  
-                ws = np.exp(ws) # (K, S)
+                ws = np.exp(ws)
 
                 Nk = ws.sum(1) 
                 mu = (ws[...,None]*x[None,...]).sum(1)/Nk[:,None] 
@@ -114,7 +111,7 @@ def task2(x, K):
 
                 likelihood_next = np.sum(max_log_probs + tmp) 
                 delta = np.abs(likelihood_next - likelihood)
-                likelihood  = likelihood_next
+                likelihood = likelihood_next
                 converged = delta < criteria
         
         print('EM algorithm finished in ', j, ' iteration.')
@@ -238,44 +235,43 @@ def task3(x, mask, m_params):
 
     # Partition of the Mean
     mu_old = m_params[0] 
-    mu_2 = mu_old[:, indices_of_one]    # (K, L2)
-    mu_1 = mu_old[:, indices_of_zero]   # (K, L1)
+    mu_2 = mu_old[:, indices_of_one]
+    mu_1 = mu_old[:, indices_of_zero]
 
     # Partition of the Covariance matrix
     sigma_old = m_params[1]
-    sigma_12 = sigma_old[:, indices_of_zero][:, :, indices_of_one]  #   (K, L1, L2)
-    sigma_22 = sigma_old[:, indices_of_one][:, :, indices_of_one]   #   (K, L2, L2)
-    sigma_11 = sigma_old[:, indices_of_zero][:, :, indices_of_zero] #   (K, L1, L1)
-    sigma_21 = sigma_old[:, indices_of_one][:, :, indices_of_zero]  #   (K, L2, L1)
+    sigma_12 = sigma_old[:, indices_of_zero][:, :, indices_of_one]
+    sigma_22 = sigma_old[:, indices_of_one][:, :, indices_of_one]
+    sigma_11 = sigma_old[:, indices_of_zero][:, :, indices_of_zero]
+    sigma_21 = sigma_old[:, indices_of_one][:, :, indices_of_zero]
 
     # Partition of the variable
-    x = np.reshape(x, [S, -1]) # (S, M^2)
+    x = np.reshape(x, [S, -1])
     x2 = np.zeros(shape=(S, len(indices_of_one))) 
     x1 = np.zeros(shape=(S, len(indices_of_zero)))
-    x2[:, :] = x[:, indices_of_one] # (S, L1)
-    x1[:, :] = x[:, indices_of_zero] # (S, L2)
+    x2[:, :] = x[:, indices_of_one]
+    x1[:, :] = x[:, indices_of_zero]
 
     # Calculating the new Pi's.
-    pi = m_params[2] # (K, )
-    probs = np.exp(normal_dist(x2, mu_2, sigma_22)) # (K, S)
-    numerator = pi[..., None] * probs               # (K, 1) * (K, S) -> (K, S) 
-    denominator = np.sum(pi[..., None] * probs, axis = 0)[None, ...] # (K, S) -> (1, S)
-    pi_new = numerator / denominator # (K, S)
+    pi = m_params[2]
+    probs = np.exp(normal_dist(x2, mu_2, sigma_22))
+    numerator = pi[..., None] * probs
+    denominator = np.sum(pi[..., None] * probs, axis = 0)[None, ...]
+    pi_new = numerator / denominator
 
     # Calulating the posterior expecatation and plot.
     D = x2.shape[1]
-    mu_1_2 = np.zeros(shape=(K, length_x1)) # (K, L1)
-    inv_sigma_22 = np.linalg.inv(sigma_22 + 1e-6 * np.eye(D)) # (K, L2, L2)
-    tmp = sigma_12 @ inv_sigma_22 # (K, L1, L2) @ (K, L2, L2) -> (K, L1, L2)
+    mu_1_2 = np.zeros(shape=(K, length_x1))
+    inv_sigma_22 = np.linalg.inv(sigma_22 + 1e-6 * np.eye(D))
+    tmp = sigma_12 @ inv_sigma_22
 
     for s in range(S):
-        sample = x2[s] # (L2, )
-        diff = sample[None, ...] - mu_2 # (K, L2)
+        sample = x2[s]
+        diff = sample[None, ...] - mu_2
 
-        pi_1_2 = pi_new[:, s][..., None] # (K, 1)
+        pi_1_2 = pi_new[:, s][..., None]
         mu_1_2 = mu_1 + np.squeeze((tmp @ diff[..., None]), axis=2)
-         
-        
+
         post_expectation = np.sum(pi_1_2 * mu_1_2, axis=0)
 
         reconstruct = np.zeros(shape=(sz**2))
@@ -307,11 +303,12 @@ if __name__ == '__main__':
     gmm_params, fig1 = task2(x_train,K)
 
     # Task 2: inpainting with conditional GMM
-    size = 28*28
-    tmp = np.ones(size)
-    zero_indices = np.random.choice(size, int(0.9 * size), False)
-    tmp[zero_indices] = 0
-    mask = tmp
+    size_of_img = 28*28
+    int_value = int(size_of_img * 0.9)
+    tmp_one = np.ones(size_of_img)
+    tmp_zero_indices = np.random.choice(size_of_img, int_value, False)
+    tmp_one[tmp_zero_indices] = 0
+    mask = tmp_one
 
     fig2 = task3(x_test,mask,gmm_params)
 
