@@ -222,8 +222,9 @@ def task3(x, mask, m_params):
 
         return log_probs
 
-    mask_2d = np.reshape(mask, (sz, _))
 
+    # Masking the samples
+    mask_2d = np.reshape(mask, (sz, _))
     for i in range(S):
         x[i] = x[i] * mask_2d
 
@@ -232,73 +233,59 @@ def task3(x, mask, m_params):
 
     indices_of_one = np.flatnonzero(mask == 1)
     indices_of_zero = np.flatnonzero(mask == 0)
-
     length_x2 = len(indices_of_one)
-    length_x1 = 784 - length_x2
+    length_x1 = len(indices_of_zero)
 
-    mu_1 = np.zeros(shape=(K, length_x1))
-    mu_2 = np.zeros(shape=(K, length_x2))
-    mu_old = m_params[0]
-    for i in range(K):
-        mu_2[i] = mu_old[i, indices_of_one]
-        mu_1[i] = mu_old[i, indices_of_zero]
+    # Partition of the Mean
+    mu_old = m_params[0] 
+    mu_2 = mu_old[:, indices_of_one]    # (K, L2)
+    mu_1 = mu_old[:, indices_of_zero]   # (K, L1)
 
-    sigma_12 = np.zeros(shape=(K, length_x1, length_x2))
-    sigma_22 = np.zeros(shape=(K, length_x2, length_x2))
-    sigma_11 = np.zeros(shape=(K, length_x1, length_x1))
-    sigma_21 = np.zeros(shape=(K, length_x2, length_x1))
-
+    # Partition of the Covariance matrix
     sigma_old = m_params[1]
-    for i in range(K):
-        rows = sigma_old[i][indices_of_zero, :]
-        matrix = rows[:, indices_of_one]
-        sigma_12[i] = matrix
+    sigma_12 = sigma_old[:, indices_of_zero][:, :, indices_of_one]  #   (K, L1, L2)
+    sigma_22 = sigma_old[:, indices_of_one][:, :, indices_of_one]   #   (K, L2, L2)
+    sigma_11 = sigma_old[:, indices_of_zero][:, :, indices_of_zero] #   (K, L1, L1)
+    sigma_21 = sigma_old[:, indices_of_one][:, :, indices_of_zero]  #   (K, L2, L1)
 
-        rows = sigma_old[i][indices_of_one, :]
-        matrix = rows[:, indices_of_one]
-        sigma_22[i] = matrix
-
-        rows = sigma_old[i][indices_of_zero, :]
-        matrix = rows[:, indices_of_zero]
-        sigma_11[i] = matrix
-
-        rows = sigma_old[i][indices_of_one, :]
-        matrix = rows[:, indices_of_zero]
-        sigma_21[i] = matrix
-
-    x = np.reshape(x, [S, -1])
-
-    x2 = np.zeros(shape=(S, len(indices_of_one)))
+    # Partition of the variable
+    x = np.reshape(x, [S, -1]) # (S, M^2)
+    x2 = np.zeros(shape=(S, len(indices_of_one))) 
     x1 = np.zeros(shape=(S, len(indices_of_zero)))
+    x2[:, :] = x[:, indices_of_one] # (S, L1)
+    x1[:, :] = x[:, indices_of_zero] # (S, L2)
 
-    for i in range(S):
-        x2[i] = x[i, indices_of_one]
+    # Calculating the new Pi's.
+    pi = m_params[2] # (K, )
+    probs = np.exp(normal_dist(x2, mu_2, sigma_22)) # (K, S)
+    numerator = pi[..., None] * probs               # (K, 1) * (K, S) -> (K, S) 
+    denominator = np.sum(pi[..., None] * probs, axis = 0)[None, ...] # (K, S) -> (1, S)
+    pi_new = numerator / denominator # (K, S)
 
+    # Calulating the posterior expecatation and plot.
     D = x2.shape[1]
+    mu_1_2 = np.zeros(shape=(K, length_x1)) # (K, L1)
+    inv_sigma_22 = np.linalg.inv(sigma_22 + 1e-6 * np.eye(D)) # (K, L2, L2)
+    tmp = sigma_12 @ inv_sigma_22 # (K, L1, L2) @ (K, L2, L2) -> (K, L1, L2)
 
-    sigma_1_cond_2 = np.zeros(shape=(3, 705, 705))
-    mu_1_cond_2 = np.zeros(shape=(K, 10, 705))
-    diff = x2[None,...] - mu_2[:,None,:]
+    for s in range(S):
+        sample = x2[s] # (L2, )
+        diff = sample[None, ...] - mu_2 # (K, L2)
 
-    for i in range(K):
-        mu_1_cond_2[i] = (mu_1[i][:,None] + np.dot((sigma_12[i] @ np.linalg.inv(sigma_22 + 1e-6 * np.eye(D))[i,:,:]),diff[i, :,:].T)).T
-        sigma_1_cond_2[i] = sigma_11[i] - (sigma_12[i] @ np.linalg.inv(sigma_22 + 1e-6 * np.eye(D)) @ sigma_21[i])[i,:,:]
+        pi_1_2 = pi_new[:, s][..., None] # (K, 1)
+        mu_1_2 = mu_1 + np.squeeze((tmp @ diff[..., None]), axis=2)
+         
+        
+        post_expectation = np.sum(pi_1_2 * mu_1_2, axis=0)
 
-    pi = m_params[2]
-    numerator = normal_dist(x2, mu_2, sigma_22) * pi[:, np.newaxis]
-    denominator = np.sum(pi[..., None] * normal_dist(x2, mu_2, sigma_22), axis = 0)
+        reconstruct = np.zeros(shape=(sz**2))
+        reconstruct[indices_of_one] = x2[s]
+        reconstruct[indices_of_zero] = post_expectation
+        reconstruct = reconstruct.reshape((sz,sz))
 
-    pi_new = numerator / denominator
+        ax[s, 1].imshow(reconstruct, cmap='gray')        
 
-    mu_1_cond_2 = mu_1_cond_2[:, 0, :]
-
-    # ovdje fali još suma, ali onda nestane još jedna dimenzija
-    posteriori_exp = pi_new * normal_dist(x1, mu_1_cond_2, sigma_1_cond_2)
-    print(posteriori_exp.shape)
-
-    #for s in range(S):
-    #    ax[s,2].imshow(x[s], vmin=0, vmax=1., cmap='gray')
-
+    
     """ End of your code
     """
 
@@ -308,7 +295,7 @@ if __name__ == '__main__':
     pdf = PdfPages('figures.pdf')
 
     # Task 1: transformations of pdfs
-    #task1()
+    task1()
 
     # load train and test data
     with np.load("data.npz") as f:
