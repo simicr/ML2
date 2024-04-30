@@ -167,6 +167,7 @@ def task2(x, K):
         k = np.random.choice(K, p=pi)
         sample = np.random.multivariate_normal(mu[k], sigma[k])
         ax2[i // 5, i % 5].imshow(sample.reshape(M,M), cmap='gray')
+        ax2[i // 5, i % 5].set_title('Component {}'.format(k), fontsize=6)
 
     
     """ End of your code
