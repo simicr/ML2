@@ -13,8 +13,8 @@ from matplotlib.backends.backend_pdf import PdfPages
 from scipy.integrate import quad
 
 def task1():
-    # probability density functions with change of variables, check that you obtain a valid transformed pdf
-    
+    # Probability density functions with change of variables, 
+    # check that you obtain a valid transformed pdf
     """ Start of your code
     """
     def pz(z): 
@@ -103,6 +103,7 @@ def task2(x, K):
                 ws = log_pi + log_probs - max_log_probs - tmp  
                 ws = np.exp(ws)
 
+                # We took this part from Assignment explanation.
                 Nk = ws.sum(1) 
                 mu = (ws[...,None]*x[None,...]).sum(1)/Nk[:,None] 
                 diff = (x[None,...] - mu[:,None,:]) 
