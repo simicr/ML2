@@ -48,7 +48,25 @@ def task1():
 
     """ Start of your code 
     """
+    for col, R in enumerate([1, 10, 100, 1000]):
+        b = np.random.uniform(low=0, high=2 * np.pi, size=R)
+        omega = np.random.normal(loc=0, scale=1, size=(D, R))
+        K_app = np.zeros(shape=(N, N))
 
+        for i in range(N):
+            for j in range(N):
+                z_x_transpose = (np.sqrt(2 / R) * np.cos(omega.T @ X[i] + b)).T
+                z_x = np.sqrt(2 / R) * np.cos(omega.T @ X[j] + b)
+                K_app[i, j] = z_x_transpose @ z_x
+        axes[0, col].imshow(K_app)
+
+
+    # computation of Gauss kernel
+    K = np.zeros(shape=(N, N))
+    for i in range(N):
+        for j in range(N):
+            K[i, j] = np.exp(- np.linalg.norm(X[i] - X[j]) ** 2 / 2)
+    axes[0, 4].imshow(K)
 
 
 
@@ -121,9 +139,9 @@ if __name__ == '__main__':
     pdf = PdfPages('figures.pdf')
 
     fig1 = task1()
-    fig2 = task2()
+    #fig2 = task2()
     pdf.savefig(fig1)
-    pdf.savefig(fig2)
+    #pdf.savefig(fig2)
 
     pdf.close()
 
