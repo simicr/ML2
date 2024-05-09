@@ -48,6 +48,7 @@ def task1():
 
     """ Start of your code 
     """
+    # Task 1.1.
     for col, R in enumerate([1, 10, 100, 1000]):
         b = np.random.uniform(low=0, high=2 * np.pi, size=R)
         omega = np.random.normal(loc=0, scale=1, size=(D, R))
@@ -67,6 +68,15 @@ def task1():
         for j in range(N):
             K[i, j] = np.exp(- np.linalg.norm(X[i] - X[j]) ** 2 / 2)
     axes[0, 4].imshow(K)
+
+    # Task 1.2.
+    c1c2 = 1
+    sigma = 1
+    K = np.zeros(shape=(N, N))
+    for i in range(N):
+        for j in range(N):
+            K[i, j] = c1c2 * np.exp(- np.linalg.norm(X[i] - X[j]) ** 2 / (4 * sigma ** 2))
+    axes[1, 4].imshow(K)
 
 
 
