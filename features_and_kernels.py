@@ -48,7 +48,8 @@ def task1():
 
     """ Start of your code 
     """
-    # Task 1.1.
+
+    # # # Task 1.1.
     for col, R in enumerate([1, 10, 100, 1000]):
         b = np.random.uniform(low=0, high=2 * np.pi, size=R)
         omega = np.random.normal(loc=0, scale=1, size=(D, R))
@@ -66,19 +67,34 @@ def task1():
     K = np.zeros(shape=(N, N))
     for i in range(N):
         for j in range(N):
-            K[i, j] = np.exp(- np.linalg.norm(X[i] - X[j]) ** 2 / 2)
+            K[i, j] = np.exp(- np.linalg.norm(X[i] - X[j], ord=1) ** 2 / 2)
     axes[0, 4].imshow(K)
 
-    # Task 1.2.
+    #Task 1.2.
     c1c2 = 1
     sigma = 1
     K = np.zeros(shape=(N, N))
     for i in range(N):
         for j in range(N):
-            K[i, j] = c1c2 * np.exp(- np.linalg.norm(X[i] - X[j]) ** 2 / (4 * sigma ** 2))
+
+            K[i, j] = c1c2 * np.exp(- np.linalg.norm(X[i] - X[j], ord=1) ** 2 / (4 * sigma ** 2))
     axes[1, 4].imshow(K)
 
+    for col, R in enumerate([1, 10, 100, 1000]):
+        sigma = 1
+        K_app = np.zeros(shape=(N, N))
 
+        indices_of_X = np.random.randint(low=0, high = N, size = R)
+        t = X[indices_of_X]
+
+        for i in range(N):
+            for j in range(N):
+
+                z_x_transpose = (np.sqrt(1 / R) * (np.exp(- np.linalg.norm(X[i][None, ...] - t) ** 2) / (2 * sigma ** 2))).T
+                z_x = np.sqrt(1 / R) * (np.exp(- (np.linalg.norm(X[j][None, ...] - t) ** 2)) / (2 * sigma ** 2))
+
+                K_app[i, j] = z_x_transpose * z_x
+        axes[1, col].imshow(K_app)
 
     """ End of your code 
     """
