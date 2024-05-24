@@ -49,52 +49,41 @@ def task1():
     """ Start of your code 
     """
 
-    # # # Task 1.1.
+    print('Computing approximation via Random Fourier...')
     for col, R in enumerate([1, 10, 100, 1000]):
         b = np.random.uniform(low=0, high=2 * np.pi, size=R)
         omega = np.random.normal(loc=0, scale=1, size=(D, R))
-        K_app = np.zeros(shape=(N, N))
 
-        for i in range(N):
-            for j in range(N):
-                z_x_transpose = (np.sqrt(2 / R) * np.cos(omega.T @ X[i] + b)).T
-                z_x = np.sqrt(2 / R) * np.cos(omega.T @ X[j] + b)
-                K_app[i, j] = z_x_transpose @ z_x
+        Z = np.sqrt(2 / R) * np.cos(X @ omega + b)
+        K_app = Z @ Z.T
+
         axes[0, col].imshow(K_app)
 
-
-    # computation of Gauss kernel
-    K = np.zeros(shape=(N, N))
-    for i in range(N):
-        for j in range(N):
-            K[i, j] = np.exp(- np.linalg.norm(X[i] - X[j], ord=1) ** 2 / 2)
-    axes[0, 4].imshow(K)
-
-    #Task 1.2.
-    c1c2 = 1
-    sigma = 1
-    K = np.zeros(shape=(N, N))
-    for i in range(N):
-        for j in range(N):
-
-            K[i, j] = c1c2 * np.exp(- np.linalg.norm(X[i] - X[j], ord=1) ** 2 / (4 * sigma ** 2))
-    axes[1, 4].imshow(K)
-
+    print('Computing approximation via Random Gaus ...')
     for col, R in enumerate([1, 10, 100, 1000]):
+        
         sigma = 1
-        K_app = np.zeros(shape=(N, N))
+        t = X[np.random.randint(low=0, high = N, size = R)]
 
-        indices_of_X = np.random.randint(low=0, high = N, size = R)
-        t = X[indices_of_X]
+        distances = np.linalg.norm(X[:, None, :] - t[None, :, :], axis=2) ** 2
+        Z = np.sqrt(1 / R) * np.exp(-distances / (2 * sigma ** 2))
+        K_app = Z @ Z.T
 
-        for i in range(N):
-            for j in range(N):
-
-                z_x_transpose = (np.sqrt(1 / R) * (np.exp(- np.linalg.norm(X[i][None, ...] - t) ** 2) / (2 * sigma ** 2))).T
-                z_x = np.sqrt(1 / R) * (np.exp(- (np.linalg.norm(X[j][None, ...] - t) ** 2)) / (2 * sigma ** 2))
-
-                K_app[i, j] = z_x_transpose * z_x
         axes[1, col].imshow(K_app)
+
+        
+    print('Computing exact kernels ...')
+    c1 = 1
+    c2 = 1
+    sigma = 1
+    
+    pairwise_distances = np.linalg.norm(X[:, None, :] - X[:, None, :].transpose(1, 0, 2), axis=2)
+    K1 = np.exp(-pairwise_distances ** 2 / 2)
+    K2 = c1 * c2 * np.exp(-pairwise_distances ** 2 / (4 * sigma ** 2))
+
+    axes[0, 4].imshow(K1)
+    axes[1, 4].imshow(K2)
+    print('Finished Task 1')
 
     """ End of your code 
     """
@@ -150,7 +139,85 @@ def task2():
 
     """ Start of your code 
     """
+    def fourier(x, r):
+        b = np.random.uniform(low=0, high=2 * np.pi, size=r)
+        omega = np.random.normal(loc=0, scale=1, size=(D, r))
+        
+        return np.sqrt(2 / r) * np.cos(x @ omega + b)
 
+    def gaus(x, n, r):
+        sigma = 1
+        t = x[np.random.randint(low=0, high = n, size = r)]
+        distances = np.linalg.norm(x[:, None, :] - t[None, :, :], axis=2) ** 2
+
+        return np.sqrt(1 / r) * np.exp(-distances / (2 * sigma ** 2))
+    
+    def train_and_test(PHI, PHI_test, lmd):
+
+        train_loss = 0
+        test_loss = 0
+
+        theta = np.linalg.inv(PHI.T @ PHI + lmd*np.eye(r)) @ ( PHI.T @ y) # What to do if singular?
+        train_prediction = PHI @ theta[..., None]
+        test_prediction = PHI_test @ theta[..., None]
+        
+        train_loss = (np.sum((y[..., None] - train_prediction) ** 2) / n)
+        test_loss = (np.sum((y_test[..., None] - test_prediction) ** 2) / n_test)
+        
+        return train_loss, test_loss
+
+    experiments = 5
+    lamf = 10
+    lamg = 10
+    fourier_history = np.zeros(shape=(2, R.shape[0], experiments))
+    gaus_history = np.zeros(shape=(2, R.shape[0], experiments))    
+    
+    for e in range(experiments):
+
+        # If we use the same data set all the time we will get 
+        # the same results all the time.
+        x_, y_ = gen_data(n+n_test,D)
+        idx = np.random.permutation(np.arange(n+n_test))
+        x,y,x_test,y_test = x_[idx][:n],y_[idx][:n],x_[idx][n::],y_[idx][n::]
+
+        for r in R:
+
+            # Feature transformation
+            PHIF_train = fourier(x, r)
+            PHIF_test = fourier(x_test, r)
+
+            PHIG_train = gaus(x, n, r) 
+            PHIG_test = gaus(x_test, n_test, r)
+
+            # Train and test
+            f_train , f_test = train_and_test(PHIF_train, PHIF_test, lamf)
+            g_train , g_test = train_and_test(PHIG_train, PHIG_test, lamg)
+
+            # Appending the results
+            fourier_history[0, r - 1, e] = f_train
+            fourier_history[1, r - 1, e] = f_test
+            gaus_history[0, r - 1, e] = g_train
+            gaus_history[1, r - 1, e] = g_test
+
+            # Task 3 starting point
+
+            
+
+
+
+
+    
+    for i, history in enumerate([fourier_history, gaus_history]):
+
+        train_loss_mean = np.mean(history[0], axis=1)
+        test_loss_mean = np.mean(history[1], axis=1)
+        train_loss_std = np.std(history[1], axis=1)
+        test_loss_std = np.std(history[1], axis=1)
+
+        ax[i].plot(R, train_loss_mean, label='Train Loss')
+        ax[i].fill_between(R, train_loss_mean - train_loss_std, train_loss_mean + train_loss_std, alpha=0.3)
+        ax[i].plot(R, test_loss_mean, label='Test Loss')
+        ax[i].fill_between(R, test_loss_mean - test_loss_std, test_loss_mean + test_loss_std, alpha=0.3)
 
 
     """ End of your code 
@@ -165,9 +232,10 @@ if __name__ == '__main__':
     pdf = PdfPages('figures.pdf')
 
     fig1 = task1()
-    #fig2 = task2()
+    fig2 = task2()
+
     pdf.savefig(fig1)
-    #pdf.savefig(fig2)
+    pdf.savefig(fig2)
 
     pdf.close()
 
