@@ -167,17 +167,18 @@ def task2():
         return train_loss, test_loss
 
     experiments = 5
-    lamf = 2
+    sigma = 1.0
+    c1 = 1.0
+    c2 = 1.0
+
+    lamf = 20
     lamg = 2
     fourier_history = np.zeros(shape=(2, R.shape[0], experiments))
-    gaus_history = np.zeros(shape=(2, R.shape[0], experiments))    
-    
-    for e in range(experiments):
-         
-        #x_, y_ = gen_data(n+n_test,D)
-        #idx = np.random.permutation(np.arange(n+n_test))
-        #x,y,x_test,y_test = x_[idx][:n],y_[idx][:n],x_[idx][n::],y_[idx][n::]
+    gaus_history = np.zeros(shape=(2, R.shape[0], experiments)) 
 
+
+    for e in range(experiments):
+        
         for r in R:
 
             # Feature transformation
@@ -197,8 +198,6 @@ def task2():
             gaus_history[0, r - 1, e] = g_train
             gaus_history[1, r - 1, e] = g_test
 
-            # Task 3 starting point
-
     for i, history in enumerate([fourier_history, gaus_history]):
 
         train_loss_mean = np.mean(history[0], axis=1)
@@ -212,6 +211,39 @@ def task2():
         ax[i].fill_between(R, test_loss_mean - test_loss_std, test_loss_mean + test_loss_std, alpha=0.3)
 
 
+    # Needs to be reviewed.
+
+    def train_and_evaluate_kernal(Ktrain, Ktest, lmd):
+
+        a = np.linalg.inv(Ktrain + lmd*np.eye(n)) @ (lmd*np.eye(n) @ y)
+
+        train_prediction = Ktrain @ a
+        test_prediction = Ktest @ a
+
+        train_loss = (np.sum((y - train_prediction) ** 2) / n)
+        test_loss = (np.sum((y_test - test_prediction) ** 2) / n_test)
+        
+        return train_loss, test_loss
+    
+    # Task 3 -> calculating the kernels
+    pairwise_distances = np.linalg.norm(x[:, None, :] - x[:, None, :].transpose(1, 0, 2), axis=2)
+    pairwise_distances2 = np.linalg.norm(x_test[:, None, :] - x[:, None, :].transpose(1, 0, 2), axis=2)
+
+    KF_train = np.exp(-pairwise_distances ** 2 / 2)
+    KF_test = np.exp(-pairwise_distances2 ** 2 / 2)
+
+    KG_train = c1 * c2 * np.exp(-pairwise_distances ** 2 / (4 * sigma ** 2))
+    KG_test = c1 * c2 * np.exp(-pairwise_distances2 ** 2 / (4 * sigma ** 2))
+
+    # Task 3 -> evaluating the loss
+    kf_train_loss, kf_test_loss = train_and_evaluate_kernal(KF_train, KF_test, lamf)
+    kg_train_loss, kg_test_loss = train_and_evaluate_kernal(KG_train, KG_test, lamg)
+
+    # Task 3 -> plotting
+    for i, (train, test) in enumerate([(kf_train_loss, kf_test_loss),(kg_train_loss, kg_test_loss)]):
+        ax[i].axhline(y=train, color = 'blue', label='Kernal train', linestyle='--')
+        ax[i].axhline(y=test,color ='orange', label='Kernal test', linestyle='--')
+        
     """ End of your code 
     """
 
