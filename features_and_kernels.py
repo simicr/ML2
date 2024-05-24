@@ -171,8 +171,8 @@ def task2():
     c1 = 1.0
     c2 = 1.0
 
-    lamf = 20
-    lamg = 2
+    lamf = 10
+    lamg = 10    
     fourier_history = np.zeros(shape=(2, R.shape[0], experiments))
     gaus_history = np.zeros(shape=(2, R.shape[0], experiments)) 
 
@@ -215,10 +215,10 @@ def task2():
 
     def train_and_evaluate_kernal(Ktrain, Ktest, lmd):
 
-        a = np.linalg.inv(Ktrain + lmd*np.eye(n)) @ (lmd*np.eye(n) @ y)
+        a = -np.linalg.inv(Ktrain + lmd*np.eye(n)) @ (lmd*np.eye(n) @ y)
 
-        train_prediction = Ktrain @ a
-        test_prediction = Ktest @ a
+        train_prediction = (-1/lmd) * Ktrain @ a
+        test_prediction = (-1/lmd) * Ktest @ a
 
         train_loss = (np.sum((y - train_prediction) ** 2) / n)
         test_loss = (np.sum((y_test - test_prediction) ** 2) / n_test)
