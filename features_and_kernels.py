@@ -167,18 +167,16 @@ def task2():
         return train_loss, test_loss
 
     experiments = 5
-    lamf = 10
-    lamg = 10
+    lamf = 2
+    lamg = 2
     fourier_history = np.zeros(shape=(2, R.shape[0], experiments))
     gaus_history = np.zeros(shape=(2, R.shape[0], experiments))    
     
     for e in range(experiments):
-
-        # If we use the same data set all the time we will get 
-        # the same results all the time.
-        x_, y_ = gen_data(n+n_test,D)
-        idx = np.random.permutation(np.arange(n+n_test))
-        x,y,x_test,y_test = x_[idx][:n],y_[idx][:n],x_[idx][n::],y_[idx][n::]
+         
+        #x_, y_ = gen_data(n+n_test,D)
+        #idx = np.random.permutation(np.arange(n+n_test))
+        #x,y,x_test,y_test = x_[idx][:n],y_[idx][:n],x_[idx][n::],y_[idx][n::]
 
         for r in R:
 
@@ -201,12 +199,6 @@ def task2():
 
             # Task 3 starting point
 
-            
-
-
-
-
-    
     for i, history in enumerate([fourier_history, gaus_history]):
 
         train_loss_mean = np.mean(history[0], axis=1)
