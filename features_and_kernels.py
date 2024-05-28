@@ -171,8 +171,8 @@ def task2():
     c1 = 1.0
     c2 = 1.0
 
-    lamf = 10
-    lamg = 10    
+    lamf = 1
+    lamg = 1    
     fourier_history = np.zeros(shape=(2, R.shape[0], experiments))
     gaus_history = np.zeros(shape=(2, R.shape[0], experiments)) 
 
@@ -238,6 +238,9 @@ def task2():
     # Task 3 -> evaluating the loss
     kf_train_loss, kf_test_loss = train_and_evaluate_kernal(KF_train, KF_test, lamf)
     kg_train_loss, kg_test_loss = train_and_evaluate_kernal(KG_train, KG_test, lamg)
+
+    print('KF', kf_train_loss, kf_test_loss)
+    print('KG', kg_train_loss, kg_test_loss)
 
     # Task 3 -> plotting
     for i, (train, test) in enumerate([(kf_train_loss, kf_test_loss),(kg_train_loss, kg_test_loss)]):
