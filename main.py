@@ -36,7 +36,16 @@ def generate_data(n_samples):
     """ Start of your code
     """
 
+    print('Generating data ...')
+    mu = 0.25 * np.array([[1, 1], [3, 1], [2, 3]])
+    sig = np.array([np.diag([0.01, 0.01]), np.diag([0.01, 0.01]), np.diag([0.01, 0.01])])
+    a = np.array([1/3, 1/3, 1/3])
+
+    for e in range(n_samples):
+        k = np.random.choice(a.shape[0], p=a)
+        x[e] = torch.tensor(np.random.multivariate_normal(mu[k], sig[k]))
     
+    plt.hist2d(x[:, 0].numpy(), x[:, 1].numpy(), bins=128)
 
     """ End of your code
     """
@@ -87,9 +96,133 @@ def dsm(x, params):
 
     """ Start of your code
     """
-    noiselevels = [0,0,0] # TODO: replace these with the chosen noise levels for plotting the density/scores
-    Net = None # TODO: replace with torch.nn module
-    sigmas_all = None # TODO: replace with the L noise levels
+    class Network(torch.nn.Module):
+
+        def __init__(self, *args, **kwargs) -> None:
+            super().__init__(*args, **kwargs)
+            self.fc1 = nn.Linear(in_features=3, out_features=16, bias=True, dtype=torch.float64)
+            self.fc2 = nn.Linear(in_features=16, out_features=1, bias=True, dtype=torch.float64)
+
+        def forward(self, x):
+            x = F.elu(self.fc1(x))
+            x = self.fc2(x)
+            return x
+
+    def prob_per_component(points, mu, sig): # TODO: Proveriti
+        
+        D = points.shape[2]
+        K = mu.shape[0]
+        prob = np.zeros((K, points.shape[0], points.shape[1]))
+        
+        for k in range(K):
+            norm_const = 1 / (np.sqrt((2 * np.pi) ** D * np.linalg.det(sig[k])))
+            inv_cov = np.linalg.inv(sig[k])
+            diff = points - mu[k]
+
+            exponent = np.einsum('...k,kl,...l->...', diff, inv_cov, diff)
+            prob[k] = norm_const * np.exp(-0.5 * exponent)
+
+        return prob
+
+    def gmm_density(points, mu, sig, a): # TODO: Proveriti
+
+        probs = prob_per_component(points, mu, sig)
+        return np.sum(a[:, None, None] * probs, axis=0)
+    
+    def gmm_score(points, mu, sigma, a): # TODO: Proveriti
+        
+        K = mu.shape[0]
+
+        probs = prob_per_component(points, mu, sigma) 
+        gmmdensity = gmm_density(points, mu, sigma, a) 
+        
+        exponent_gradient = np.zeros((K, points.shape[0], points.shape[1], points.shape[2])) 
+        
+        for k in range(K):
+            diff = points - mu[k]
+            inv_cov = np.linalg.inv(sig[k])
+            exponent_gradient[k] = np.einsum('kl,...l->...k', inv_cov, diff)
+
+        normal_gradient = probs[..., None] * exponent_gradient 
+        gmm_gradient = np.sum(a[:, None, None, None] * normal_gradient, axis=0)
+
+        return -gmm_gradient / gmmdensity[..., None]
+
+    sigma_1 , sigma_L, L = 0.1 , 2, 5
+
+    noiselevels = [0, sigma_1, sigma_L] # TODO: replace these with the chosen noise levels for plotting the density/scores
+    Net = Network() # TODO: replace with torch.nn module
+    sigmas_all = get_sigmas(sigma_1=sigma_1, sigma_L=sigma_L, L=L) # TODO: replace with the L noise levels
+
+
+    print('Visualization of the pertrub data ...')
+    n_samples = x.size(0)
+    for idx, noise in enumerate(noiselevels):
+        z = torch.tensor(np.random.multivariate_normal(mean=[0,0], cov=np.eye(2), size=n_samples))
+        bar_x = x + noise * z
+        ax2[idx].hist2d(bar_x[:, 0].numpy(), bar_x[:, 1].numpy(), bins=128)
+    
+
+
+    print('Training the model ...')
+    epochs = 5
+    optimer = optim.Adam(lr=1e-2, params=Net.parameters())
+    criterion = nn.MSELoss()
+    history = []  
+    
+    for param in Net.parameters():
+        param.requires_grad = True
+    x = x.double()
+    x.requires_grad = True
+
+    for e in range(epochs):
+
+        random_indices = torch.randint(0, L, size=(n_samples, 1))
+
+        z = torch.tensor(np.random.multivariate_normal(mean=[0,0], cov=np.eye(2), size=n_samples))
+
+        sigmas = sigmas_all[random_indices]
+        bar_x = x + sigmas*z
+        x_with_sigma = torch.cat([bar_x, sigmas], dim=1)
+
+        predicted_energy = Net(x_with_sigma)
+        grad_f =  sigmas * torch.autograd.grad(outputs=[predicted_energy[i] for i in range(n_samples)], inputs=x_with_sigma, retain_graph=True)[0][:, 0:2]
+        
+        loss = (( grad_f - (x-bar_x) / sigmas) ** 2).mean()
+
+        optimer.zero_grad()
+        loss.backward()
+        optimer.step()
+        history.append(loss.item())
+
+        print(f'\t Epoch: {e} | Loss: {loss.item()}')
+
+    ax3.plot(history)
+    ax3.set_yscale('log')
+
+
+
+    print('Analytic density and score ...')
+    X = np.linspace(-1, 2, 50)
+    Y = np.linspace(2, -1, 50)
+    XM, YM = np.meshgrid(X, Y)
+    points = np.dstack((XM, YM))
+
+    for idx, noiselevel in enumerate(noiselevels):
+        ax4[0, idx].imshow(gmm_density(points, mu, sig + ( noiselevel ** 2 ) * np.eye(2), a))
+        score = gmm_score(points, mu, sig + ( noiselevel ** 2 ) * np.eye(2), a)
+        ax4[1, idx].quiver(X, Y, score[:, :, 0], score[:, :, 1], np.hypot(score[:, :, 0], score[:, :, 1]))
+        
+    print('TODO: Learned density and score ...')
+    for idx, noiselevel in enumerate(noiselevels):
+        noise = noiselevel * torch.ones(size=(50, 50, 1), dtype=torch.float64)
+        points_with_noise = torch.cat((torch.tensor(points, dtype=torch.float64), noise), dim=2)
+        predicted_energy = Net(points_with_noise)
+        ax5[0, idx].imshow(predicted_energy.detach().numpy())
+
+
+
+
 
 
     """ End of your code
