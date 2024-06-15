@@ -100,13 +100,14 @@ def dsm(x, params):
 
         def __init__(self, *args, **kwargs) -> None:
             super().__init__(*args, **kwargs)
-            self.fc1 = nn.Linear(in_features=3, out_features=16, bias=True, dtype=torch.float64)
-            self.fc2 = nn.Linear(in_features=16, out_features=1, bias=True, dtype=torch.float64)
+            self.fc1 = nn.Linear(in_features=3, out_features=128, bias=True, dtype=torch.float64)
+            self.fc2 = nn.Linear(in_features=128, out_features=64, bias=True, dtype=torch.float64)
+            self.fc3 = nn.Linear(in_features=64, out_features=1, bias=True, dtype=torch.float64)
 
         def forward(self, x):
             x = F.elu(self.fc1(x))
-            x = self.fc2(x)
-            return x
+            x = F.elu(self.fc2(x))
+            return self.fc3(x)
 
     def prob_per_component(points, mu, sig): # TODO: Proveriti
         
@@ -148,7 +149,7 @@ def dsm(x, params):
 
         return -gmm_gradient / gmmdensity[..., None]
 
-    sigma_1 , sigma_L, L = 0.1 , 2, 5
+    sigma_1 , sigma_L, L = 0.05 , 0.7, 50
 
     noiselevels = [0, sigma_1, sigma_L] # TODO: replace these with the chosen noise levels for plotting the density/scores
     Net = Network() # TODO: replace with torch.nn module
@@ -165,37 +166,39 @@ def dsm(x, params):
 
 
     print('Training the model ...')
-    epochs = 5
-    optimer = optim.Adam(lr=1e-2, params=Net.parameters())
-    criterion = nn.MSELoss()
-    history = []  
     
     for param in Net.parameters():
         param.requires_grad = True
     x = x.double()
     x.requires_grad = True
 
+    epochs = 200
+    optimer = optim.Adam(lr=1e-2, params=Net.parameters())
+    criterion = nn.MSELoss()
+    history = []  
+
     for e in range(epochs):
 
         random_indices = torch.randint(0, L, size=(n_samples, 1))
-
         z = torch.tensor(np.random.multivariate_normal(mean=[0,0], cov=np.eye(2), size=n_samples))
-
         sigmas = sigmas_all[random_indices]
         bar_x = x + sigmas*z
         x_with_sigma = torch.cat([bar_x, sigmas], dim=1)
 
-        predicted_energy = Net(x_with_sigma)
-        grad_f =  sigmas * torch.autograd.grad(outputs=[predicted_energy[i] for i in range(n_samples)], inputs=x_with_sigma, retain_graph=True)[0][:, 0:2]
-        
-        loss = (( grad_f - (x-bar_x) / sigmas) ** 2).mean()
 
         optimer.zero_grad()
-        loss.backward()
-        optimer.step()
-        history.append(loss.item())
+        predicted_energy = Net(x_with_sigma)
+        
+        grad_f = sigmas * torch.autograd.grad(outputs=[predicted_energy[i] for i in range(n_samples)], inputs=x_with_sigma, create_graph=True)[0][:, 0:2]
+        target = (x - bar_x) / sigmas
 
-        print(f'\t Epoch: {e} | Loss: {loss.item()}')
+        loss = criterion(grad_f, target)
+        loss.backward()
+
+        optimer.step()
+
+        history.append(loss.item())
+        print(f'\t Epoch: {e + 1} | Loss: {loss.item()}')
 
     ax3.plot(history)
     ax3.set_yscale('log')
