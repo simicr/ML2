@@ -125,12 +125,12 @@ def dsm(x, params):
 
         return prob
 
-    def gmm_density(points, mu, sig, a): # TODO: Proveriti
+    def gmm_density(points, mu, sig, a):
 
         probs = prob_per_component(points, mu, sig)
         return np.sum(a[:, None, None] * probs, axis=0)
     
-    def gmm_score(points, mu, sigma, a): # TODO: Proveriti
+    def gmm_score(points, mu, sigma, a):
         
         K = mu.shape[0]
 
@@ -220,13 +220,18 @@ def dsm(x, params):
     for idx, noiselevel in enumerate(noiselevels):
         noise = noiselevel * torch.ones(size=(50, 50, 1), dtype=torch.float64)
         points_with_noise = torch.cat((torch.tensor(points, dtype=torch.float64), noise), dim=2)
+        points_with_noise.requires_grad_(True)
+
         predicted_energy = Net(points_with_noise)
-        ax5[0, idx].imshow(predicted_energy.detach().numpy())
+        exp_predicted_energy = torch.exp(predicted_energy)
+        ax5[0, idx].imshow(exp_predicted_energy.detach().numpy())
 
+        score = torch.autograd.grad(outputs=predicted_energy.sum(), inputs=points_with_noise, create_graph=True)[0]
 
-
-
-
+        score_x_dim = score[:, :, 0].detach().numpy()
+        score_y_dim = score[:, :, 1].detach().numpy()
+        X, Y = np.meshgrid(np.arange(score.shape[0]), np.arange(score.shape[1]))
+        ax5[1, idx].quiver(X, Y, score_x_dim, score_y_dim, np.hypot(score_x_dim, score_y_dim))
 
     """ End of your code
     """
@@ -261,9 +266,31 @@ def sampling(Net, sigmas_all, n_samples):
 
     """ Start of your code
     """
-   
-        
+    x, (mu, sig, a), fig1 = generate_data(n_samples)
+    ax6[0].hist2d(x[:, 0].numpy(), x[:, 1].numpy(), bins=128)
 
+    # sample is  x0
+    sample = x
+
+    eps = 0.01
+    T = 10
+    L = sigmas_all.size(0)
+
+
+    for i in range(L, 1, -1):
+        alpha_i = eps * (sigmas_all[i] ** 2 / sigmas_all[0] ** 2)
+
+        for t in range(T):
+            z = np.random.normal(loc=0, scale=1, size=t)
+
+            with torch.no_grad():
+                sample = torch.cat([sample, sigmas_all[i].unsqueeze(0)], dim=1)
+                output_network = Net(sample)
+
+            sample[t] = sample[t-1] - (alpha_i / 2) * output_network + np.sqrt(alpha_i) * z
+
+
+    #ax6[1].hist2d(generate_samples, bins=30)
     """ End of your code
     """
 
