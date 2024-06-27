@@ -269,28 +269,34 @@ def sampling(Net, sigmas_all, n_samples):
     x, (mu, sig, a), fig1 = generate_data(n_samples)
     ax6[0].hist2d(x[:, 0].numpy(), x[:, 1].numpy(), bins=128)
 
-    # sample is  x0
-    sample = x
-
+    # first x0
+    sample = np.random.normal(loc=0, scale=1, size=1)
     eps = 0.01
     T = 10
     L = sigmas_all.size(0)
 
-
     for i in range(L, 1, -1):
-        alpha_i = eps * (sigmas_all[i] ** 2 / sigmas_all[0] ** 2)
+        sigma_i = sigmas_all[i-1].item()
+        sigma_0 = sigmas_all[1].item()
+
+        alpha_i = eps * (sigma_i ** 2 / sigma_0 ** 2)
 
         for t in range(T):
-            z = np.random.normal(loc=0, scale=1, size=t)
+            #z = np.random.normal(loc=0, scale=1, size=t)
+            z = torch.tensor(np.random.multivariate_normal(mean=[0, 0], cov=np.eye(2), size=(1,1)))
+            sample = torch.tensor(sample, dtype=torch.float32)
+            bar_x = sample + sigma_i * z
 
-            with torch.no_grad():
-                sample = torch.cat([sample, sigmas_all[i].unsqueeze(0)], dim=1)
-                output_network = Net(sample)
+            x_with_sigma = torch.cat([bar_x, sigma_i], dim=1)
+            output_network = Net(x_with_sigma)
+
+            output_network = torch.autograd.grad(outputs=output_network, inputs=sample)[0]
 
             sample[t] = sample[t-1] - (alpha_i / 2) * output_network + np.sqrt(alpha_i) * z
+            print('First iteration')
 
 
-    #ax6[1].hist2d(generate_samples, bins=30)
+    #ax6[1].hist2d(generate_samples, bins=128)
     """ End of your code
     """
 
