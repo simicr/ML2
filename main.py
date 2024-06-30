@@ -156,7 +156,7 @@ def dsm(x, params):
 
         return -gmm_gradient / gmmdensity[..., None]
 
-    sigma_1 , sigma_L, L = 0.08 , 1.0, 5000
+    sigma_1 , sigma_L, L = 0.05 , 1.0, 100
 
     noiselevels = [0, sigma_1, sigma_L]
     Net = Network()
@@ -179,7 +179,7 @@ def dsm(x, params):
     x = x.double()
     x.requires_grad = True
 
-    epochs = 500
+    epochs = 600
     optimer = optim.Adam(lr=1e-2, params=Net.parameters())
     criterion = nn.MSELoss()
     history = []  
@@ -290,7 +290,7 @@ def sampling(Net, sigmas_all, n_samples):
     ax6[0].hist2d(x[:, 0].numpy(), x[:, 1].numpy(), bins=128)
 
     eps = 0.01
-    T = 5000
+    T = 20
     L = sigmas_all.size(0)
     sample = torch.tensor(np.random.multivariate_normal(mean=[0,0], cov=np.eye(2), size=n_samples), requires_grad=True)
     
