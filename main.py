@@ -107,6 +107,9 @@ def dsm(x, params):
             self.fc3 = nn.Linear(in_features=32, out_features=8, bias=True, dtype=torch.float64)
             self.fc4 = nn.Linear(in_features=8, out_features=1, bias=True, dtype=torch.float64)
 
+        def count_parameters(self):
+            return sum(p.numel() for p in self.parameters() if p.requires_grad)
+        
         def forward(self, x):
             x = F.elu(self.fc1(x))
             x = F.elu(self.fc2(x))
@@ -114,7 +117,7 @@ def dsm(x, params):
             return self.fc4(x)
 
     # Compute the density under each component.
-    def prob_per_component(points, mu, sig): # TODO: Proveriti
+    def prob_per_component(points, mu, sig): 
         
         D = points.shape[2]
         K = mu.shape[0]
@@ -154,30 +157,29 @@ def dsm(x, params):
         normal_gradient = probs[..., None] * exponent_gradient 
         gmm_gradient = np.sum(a[:, None, None, None] * normal_gradient, axis=0)
 
-        return -gmm_gradient / gmmdensity[..., None]
+        return -0.5* gmm_gradient / gmmdensity[..., None]
 
     sigma_1 , sigma_L, L = 0.05 , 1.0, 100
 
-    noiselevels = [0, sigma_1, sigma_L]
+    noiselevels = [sigma_1, 0.1 ,sigma_L]
     Net = Network()
     sigmas_all = get_sigmas(sigma_1=sigma_1, sigma_L=sigma_L, L=L)
 
 
     print('Visualization of the pertrub data ...')
     n_samples = x.size(0)
-    for idx, noise in enumerate(noiselevels):
+    for idx, noise in enumerate([0, sigma_1, sigma_L]):
         z = torch.tensor(np.random.multivariate_normal(mean=[0,0], cov=np.eye(2), size=n_samples))
         bar_x = x + noise * z
         ax2[idx].hist2d(bar_x[:, 0].numpy(), bar_x[:, 1].numpy(), bins=128)
     
-
-
-    print('Training the model ...')
     
     for param in Net.parameters():
         param.requires_grad = True
     x = x.double()
     x.requires_grad = True
+
+    print(f'Training the model with {Net.count_parameters()} parameters...')
 
     epochs = 600
     optimer = optim.Adam(lr=1e-2, params=Net.parameters())
